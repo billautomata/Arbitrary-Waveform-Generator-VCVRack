@@ -80,7 +80,7 @@ struct VCO4Module : Module
     // floats that fits in a single CPU register an can be processed
     // all at once.
     float_4 phaseAccumulators[maxBanks] = {0};
-    float_4 phaseAdvance[maxBanks] = {0};
+  //  float_4 phaseAdvance[maxBanks] = {0};
     dsp::MinBlepGenerator<16, 16, float_4> sawMinBlep[maxBanks];
 
     int currentPolyphony = 1;
@@ -96,15 +96,6 @@ struct VCO4Module : Module
     }
 
     void process(const ProcessArgs& args) override {
-        if (loopCounter-- == 0) {
-            loopCounter = 3;
-            processEvery4Samples(args);
-        }
-
-        generateOutput();
-    }
-
-    void processEvery4Samples(const ProcessArgs& args) {
         currentPolyphony = std::max(1, inputs[CV_INPUT].getChannels());
         currentBanks = currentPolyphony / 4;
         if (currentPolyphony % 4) {
@@ -121,6 +112,7 @@ struct VCO4Module : Module
         // Note that assigning a float to a float_4 silently copies the float into all
         // four floats in the float_4.
         float_4 pitchParam = params[PITCH_PARAM].value;
+        #if 0
         for (int bank = 0; bank < currentBanks; ++bank) {
             const int currentChannel = bank * 4;
 
@@ -143,16 +135,34 @@ struct VCO4Module : Module
             const float_4 normalizedFreq = float_4(args.sampleTime) * freq;
             phaseAdvance[bank] = normalizedFreq;
         }
-    }
+        #endif
 
-    void generateOutput() {
         for (int bank = 0; bank < currentBanks; ++bank) {
             const int baseChannel = bank * 4;
             const int relativeChannel = currentPolyphony - baseChannel;
 
+              // This API lets us fetch the CV for four channels at once.
+            float_4 pitchCV = inputs[CV_INPUT].getPolyVoltageSimd<float_4>(baseChannel);
+        
+            // Normal arithmetic operators work transparently with float_4.
+            // Sometimes when expressions mix float_4 and float you need
+            // to explicitly convert, like we do here with the number f.
+            // Other time we do it "just because".
+            float_4 combinedPitch = pitchParam + pitchCV - float_4(4.f);
+
+            const float_4 q = float(log2(261.626));       // move up to C
+            combinedPitch += q;
+
+            // Note that because rack's approxExp2_taylor5 is templatized, it works just
+            // the same for a float_4 as it did for float.
+            const float_4 freq = rack::dsp::approxExp2_taylor5<float_4>(combinedPitch);
+
+            const float_4 normalizedFreq = float_4(args.sampleTime) * freq;
+            //phaseAdvance[bank] = normalizedFreq;
+
             // Just as before, be advance the phase and wrap around 0.
             // This time we do four oscillators at once.
-            phaseAccumulators[bank] += phaseAdvance[bank];
+            phaseAccumulators[bank] += normalizedFreq;
             phaseAccumulators[bank] -= simd::floor(phaseAccumulators[bank]);
            
             float_4 minBlepValue;
@@ -163,7 +173,7 @@ struct VCO4Module : Module
                 // This is the SIMD version of the minBlep code from VCO2. Well, more properly it's the
                 // code from VCV Fundamental VCO-1. I find this algorithm pretty difficult to figure out
                 // in SIMD. Thank goodness the Fundamental code is such a rich well to draw from.
-                float_4 halfCrossing = (0.5f - (phaseAccumulators[bank] -  phaseAdvance[bank])) /  phaseAdvance[bank];
+                float_4 halfCrossing = (0.5f - (phaseAccumulators[bank] -  normalizedFreq)) /  normalizedFreq;
                 int halfMask = simd::movemask((0 < halfCrossing) & (halfCrossing <= 1.f));
                 if (halfMask) {
                     for (int subChannel=0; subChannel < relativeChannel; ++subChannel) {
