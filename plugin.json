@@ -23,6 +23,12 @@
 			"name": "VCO3",
 			"description": "SIMD VCO",
 			"tags": ["VCO", "Polyphonic"]
+		},
+		{
+			"slug": "demo-vco4",
+			"name": "VCO4",
+			"description": "SIMD VCO update pitch",
+			"tags": ["VCO", "Polyphonic"]
         }
     ]
 }
