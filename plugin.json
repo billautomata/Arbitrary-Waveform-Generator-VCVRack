@@ -13,6 +13,12 @@
 			"tags": ["VCO", "Polyphonic"]
 		},
 		{
+			"slug": "demo-vco-custom",
+			"name": "VCO-Custom",
+			"description": "Custom VCO",
+			"tags": ["VCO", "Polyphonic"]
+		},    
+		{
 			"slug": "demo-vco2",
 			"name": "VCO2",
 			"description": "Improved VCO",
